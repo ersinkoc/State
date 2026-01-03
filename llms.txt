@@ -1,0 +1,203 @@
+# @oxog/state
+
+> Zero-dependency reactive state management for any framework
+
+## Install
+
+```bash
+npm install @oxog/state
+```
+
+## Basic Usage
+
+```typescript
+import { createStore, useStore } from '@oxog/state';
+
+// Create a store
+const store = createStore({
+  count: 0,
+  increment: (state) => ({ count: state.count + 1 }),
+  decrement: (state) => ({ count: state.count - 1 }),
+});
+
+// React
+const count = useStore(store, (s) => s.count);
+const increment = useStore(store, (s) => s.increment);
+
+// Vanilla JS
+store.subscribe((state) => console.log(state.count));
+```
+
+## API Summary
+
+### Core
+- `createStore(state, actions?)` - Create reactive store
+- `batch(fn)` - Batch multiple updates
+
+### Store Methods
+- `getState()` - Get current state
+- `setState(partial)` - Update state
+- `merge(partial)` - Deep merge state
+- `reset()` - Reset to initial
+- `subscribe(listener)` - Listen to changes
+- `use(plugin)` - Add plugin
+- `destroy()` - Cleanup
+
+### React
+- `useStore(store, selector?, equalityFn?)` - React hook
+- `useCreateStore(initialState)` - Create store in component
+- `useAction(store, actionName)` - Get action from store
+
+### Plugins
+- `persist({ key, storage?, whitelist?, blacklist? })` - Persist to storage
+- `devtools({ name?, enabled? })` - Redux DevTools
+- `history({ limit? })` - Undo/redo
+- `sync({ channel? })` - Cross-tab sync
+- `immer()` - Mutable syntax for updates
+- `selector({ selectors })` - Computed values
+
+## Common Patterns
+
+### Counter
+
+```typescript
+const store = createStore({
+  count: 0,
+  increment: (s) => ({ count: s.count + 1 }),
+  decrement: (s) => ({ count: s.count - 1 }),
+});
+
+store.increment(); // 1
+store.decrement(); // 0
+```
+
+### Async Data
+
+```typescript
+const store = createStore({
+  data: null,
+  loading: false,
+  error: null,
+  $fetch: async (state, url: string) => {
+    store.setState({ loading: true, error: null });
+    try {
+      const res = await fetch(url);
+      const data = await res.json();
+      return { data, loading: false };
+    } catch (error) {
+      return { error, loading: false };
+    }
+  },
+});
+
+await store.fetch('/api/users');
+```
+
+### Computed Values
+
+```typescript
+const store = createStore({
+  items: [],
+  filter: 'all',
+}).use(selector({
+  filteredItems: (state) => {
+    if (state.filter === 'all') return state.items;
+    return state.items.filter((i: any) => i.status === state.filter);
+  },
+  itemCount: (state) => state.items.length,
+}));
+```
+
+### Persistence
+
+```typescript
+const store = createStore({ count: 0 })
+  .use(persist({ key: 'app' }));
+
+// With whitelist
+const store = createStore({ count: 0, temp: '' })
+  .use(persist({ key: 'app', whitelist: ['count'] }));
+```
+
+### History (Undo/Redo)
+
+```typescript
+const store = createStore({ count: 0 })
+  .use(history({ limit: 50 }));
+
+store.setState({ count: 1 });
+store.setState({ count: 2 });
+store.undo(); // { count: 1 }
+store.redo(); // { count: 2 }
+```
+
+### Immer Plugin
+
+```typescript
+const store = createStore({
+  users: [{ id: 1, name: 'John' }],
+}).use(immer());
+
+store.setState((draft) => {
+  draft.users[0].name = 'Jane'; // Mutate directly
+});
+```
+
+## React Example
+
+```tsx
+import { createStore, useStore } from '@oxog/state';
+
+const store = createStore({
+  count: 0,
+  $increment: (s) => ({ count: s.count + 1 }),
+});
+
+function Counter() {
+  const count = useStore(store, (s) => s.count);
+  const increment = useStore(store, (s) => s.increment);
+
+  return (
+    <button onClick={increment}>
+      Count: {count}
+    </button>
+  );
+}
+```
+
+## TypeScript
+
+```typescript
+interface State {
+  count: number;
+  user: User | null;
+}
+
+interface Actions {
+  increment: (state: State) => Partial<State>;
+  setUser: (state: State, user: User) => Partial<State>;
+}
+
+const store = createStore<State, Actions>(
+  { count: 0, user: null },
+  {
+    increment: (s) => ({ count: s.count + 1 }),
+    setUser: (s, user) => ({ user }),
+  }
+);
+```
+
+## Errors
+
+| Code | Meaning | Solution |
+|------|---------|----------|
+| `STORE_DESTROYED` | Store was destroyed | Create new store |
+| `PLUGIN_EXISTS` | Plugin already registered | Check plugin name |
+| `INVALID_STATE_UPDATE` | Invalid setState argument | Check argument type |
+| `PLUGIN_DEPENDENCY_MISSING` | Required plugin missing | Register dependency first |
+
+## Links
+
+- Docs: https://state.oxog.dev
+- GitHub: https://github.com/ersinkoc/state
+- NPM: https://npmjs.com/package/@oxog/state
