@@ -53,6 +53,25 @@ describe('deepClone', () => {
     expect(cloned.a).toBe(1);
     expect(cloned.self).toBe(cloned);
   });
+
+  // Test lines 70-71: handle other objects (RegExp, Map, Set, etc.)
+  it('should return RegExp as-is', () => {
+    const regex = /test/g;
+    const cloned = deepClone(regex);
+    expect(cloned).toBe(regex); // Returns same reference for special objects
+  });
+
+  it('should return Map as-is', () => {
+    const map = new Map([['key', 'value']]);
+    const cloned = deepClone(map);
+    expect(cloned).toBe(map); // Returns same reference for special objects
+  });
+
+  it('should return Set as-is', () => {
+    const set = new Set([1, 2, 3]);
+    const cloned = deepClone(set);
+    expect(cloned).toBe(set); // Returns same reference for special objects
+  });
 });
 
 describe('shallowEqual', () => {
@@ -129,6 +148,18 @@ describe('deepEqual', () => {
     expect(deepEqual(null, null)).toBe(true);
     expect(deepEqual(null, {})).toBe(false);
     expect(deepEqual({}, null)).toBe(false);
+  });
+
+  // Test lines 33-34: array vs non-array comparison
+  it('should return false when comparing array to object', () => {
+    expect(deepEqual([1, 2], { 0: 1, 1: 2 })).toBe(false);
+    expect(deepEqual({ 0: 1, 1: 2 }, [1, 2])).toBe(false);
+  });
+
+  // Test lines 54-55: objects with different key counts
+  it('should return false when objects have different key counts', () => {
+    expect(deepEqual({ a: 1 }, { a: 1, b: 2 })).toBe(false);
+    expect(deepEqual({ a: 1, b: 2 }, { a: 1 })).toBe(false);
   });
 });
 
@@ -263,5 +294,97 @@ describe('identity', () => {
     expect(identity(null)).toBe(null);
     expect(identity(undefined)).toBe(undefined);
     expect(identity({ a: 1 })).toEqual({ a: 1 });
+  });
+});
+
+describe('deepMerge - coverage tests', () => {
+  // Test lines 42-44: Date object handling in main loop
+  it('should handle Date objects in source', () => {
+    const date = new Date('2024-01-01');
+    const target = { a: 1 };
+    const source = { b: { date } };
+
+    const result = deepMerge(target, source);
+
+    expect(result).toEqual({ a: 1, b: { date } });
+    expect(result.b.date).toEqual(date);
+    expect(result.b.date).not.toBe(date); // Should be a new Date instance
+  });
+
+  it('should preserve Date objects in target', () => {
+    const date1 = new Date('2024-01-01');
+    const date2 = new Date('2024-01-02');
+    const target = { date: date1 };
+    const source = { other: 1 };
+
+    const result = deepMerge(target, source);
+
+    expect(result.date).toEqual(date1);
+    expect(result.other).toBe(1);
+  });
+
+  // Test lines 77-78, 84-95: cloneValue function
+  it('should clone plain objects in merge', () => {
+    const target = { a: { x: 1 } };
+    const source = { a: { y: 2 } };
+
+    const result = deepMerge(target, source);
+
+    expect(result).toEqual({ a: { x: 1, y: 2 } });
+    // The nested object should be a new reference
+    expect(result.a).not.toBe(target.a);
+  });
+
+  it('should clone arrays during merge', () => {
+    const target = { items: [1, 2] };
+    const source = { items: [3, 4] };
+
+    const result = deepMerge(target, source);
+
+    expect(result.items).toEqual([3, 4]);
+    expect(result.items).not.toBe(source.items); // Should be a new array
+  });
+
+  it('should handle nested arrays', () => {
+    const target = { nested: [[1, 2]] };
+    const source = { nested: [[3, 4]] };
+
+    const result = deepMerge(target, source);
+
+    expect(result.nested).toEqual([[3, 4]]);
+  });
+
+  it('should handle Date objects in nested structures', () => {
+    const date = new Date('2024-01-01');
+    const target = { nested: { items: [1] } };
+    const source = { nested: { date, items: [2] } };
+
+    const result = deepMerge(target, source);
+
+    expect(result.nested.date).toEqual(date);
+    expect(result.nested.items).toEqual([2]);
+  });
+
+  it('should return target when source is null', () => {
+    const target = { a: 1 };
+    const result = deepMerge(target, null as any);
+
+    expect(result).toBe(target);
+  });
+
+  it('should return source when it is a primitive', () => {
+    const target = { a: 1 };
+    const result = deepMerge(target, 'primitive' as any);
+
+    expect(result).toBe('primitive');
+  });
+
+  // Test lines 94-95: cloneValue returns primitives as-is
+  it('should handle primitive values in nested objects', () => {
+    const target = { nested: { value: 1, name: 'test' } };
+    const source = { nested: { value: 2, name: 'updated' } };
+    const result = deepMerge(target, source);
+
+    expect(result).toEqual({ nested: { value: 2, name: 'updated' } });
   });
 });

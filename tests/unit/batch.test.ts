@@ -4,7 +4,8 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { createStore } from '../../src/store.js';
-import { batch, getBatchContext } from '../../src/batch.js';
+import { batch, getBatchContext, isBatching, createBatch } from '../../src/batch.js';
+import { getBatchStores, getBatchManagedStores } from '../../src/batch-context.js';
 
 describe('batch', () => {
   it('should execute function immediately', () => {
@@ -88,5 +89,106 @@ describe('getBatchContext', () => {
     });
 
     expect(context.isBatching()).toBe(false);
+  });
+});
+
+describe('isBatching - coverage tests', () => {
+  // Test lines 30-31: isBatching function
+  it('should return false when not batching', () => {
+    expect(isBatching()).toBe(false);
+  });
+
+  it('should return true when batching', () => {
+    batch(() => {
+      expect(isBatching()).toBe(true);
+    });
+  });
+});
+
+describe('createBatch - coverage tests', () => {
+  // Test lines 118-121: createBatch function
+  it('should create store-bound batch function', () => {
+    const store = createStore({ count: 0 });
+    const listener = vi.fn();
+    store.subscribe(listener);
+
+    const batchStore = createBatch(store);
+
+    batchStore(() => {
+      store.setState({ count: 1 });
+      store.setState({ count: 2 });
+    });
+
+    // Should notify once
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledWith({ count: 2 }, { count: 0 });
+  });
+
+  it('should handle multiple stores with separate batch functions', () => {
+    const store1 = createStore({ count: 0 });
+    const store2 = createStore({ value: 0 });
+
+    const listener1 = vi.fn();
+    const listener2 = vi.fn();
+    store1.subscribe(listener1);
+    store2.subscribe(listener2);
+
+    const batchStore1 = createBatch(store1);
+    const batchStore2 = createBatch(store2);
+
+    batchStore1(() => {
+      store1.setState({ count: 1 });
+    });
+
+    batchStore2(() => {
+      store2.setState({ value: 1 });
+    });
+
+    // Each should notify independently
+    expect(listener1).toHaveBeenCalledTimes(1);
+    expect(listener2).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('batch-context error handling', () => {
+  // Test lines 46-47, 123-134: error handling in batch
+  it('should handle errors and cleanup managed stores', () => {
+    const store = createStore({ count: 0 });
+    const context = getBatchContext();
+
+    expect(() => {
+      context.batch(store, () => {
+        throw new Error('Test error');
+      });
+    }).toThrow('Test error');
+
+    // After error, batching should be cleaned up
+    expect(context.isBatching()).toBe(false);
+  });
+
+  it('should cleanup stores on batch error', () => {
+    const store = createStore({ count: 0 });
+    const context = getBatchContext();
+
+    try {
+      context.batch(store, () => {
+        throw new Error('Error');
+      });
+    } catch (e) {
+      // Expected
+    }
+
+    // Stores should be cleared
+    expect(context.managedStores.size).toBe(0);
+    expect(context.stores.size).toBe(0);
+  });
+
+  // Test getBatchStores and getBatchManagedStores functions
+  it('should get batch stores', () => {
+    const stores = getBatchStores();
+    const managedStores = getBatchManagedStores();
+
+    expect(stores).toBeInstanceOf(Set);
+    expect(managedStores).toBeInstanceOf(Set);
   });
 });

@@ -211,3 +211,198 @@ describe('Kernel', () => {
     expect(() => kernel.register(plugin, undefined, mockStore)).toThrow('Install error');
   });
 });
+
+describe('Kernel - coverage tests', () => {
+  // Test lines 36-37: unsubscribe when listeners.get(event) is undefined
+  it('should handle unsubscribe when event has no listeners', () => {
+    const kernel = createKernel();
+    const unsubscribe = kernel.on('customEvent', () => {});
+
+    // After unsubscribe, the event should have no listeners
+    unsubscribe();
+
+    // Calling unsubscribe again should not throw
+    expect(() => unsubscribe()).not.toThrow();
+  });
+
+  // Test lines 53-54: EventBus error handling
+  it('should handle event handler errors in EventBus', () => {
+    const kernel = createKernel();
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    kernel.on('testEvent', () => {
+      throw new Error('Handler error');
+    });
+
+    kernel.eventBus.emit('testEvent', {});
+
+    expect(consoleErrorSpy).toHaveBeenCalled();
+    consoleErrorSpy.mockRestore();
+  });
+
+  // Test lines 168-169: onInit error handling
+  it('should handle onInit errors gracefully', async () => {
+    const kernel = createKernel();
+    const mockStore = {} as Store<any>;
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const plugin: Plugin = {
+      name: 'test',
+      version: '1.0.0',
+      install: vi.fn(),
+      onInit: async () => {
+        throw new Error('Init error');
+      },
+    };
+
+    kernel.register(plugin, undefined, mockStore);
+
+    // Should not throw, just log error
+    await kernel.initializeAll(mockStore);
+
+    expect(consoleErrorSpy).toHaveBeenCalled();
+    consoleErrorSpy.mockRestore();
+  });
+
+  // Test lines 180-181: unregister non-existent plugin
+  it('should handle unregister of non-existent plugin', async () => {
+    const kernel = createKernel();
+
+    // Should not throw
+    await kernel.unregister('non-existent');
+
+    expect(kernel.plugins.size).toBe(0);
+  });
+
+  // Test lines 187-188: onDestroy error handling
+  it('should handle onDestroy errors gracefully', async () => {
+    const kernel = createKernel();
+    const mockStore = {} as Store<any>;
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const plugin: Plugin = {
+      name: 'test',
+      version: '1.0.0',
+      install: vi.fn(),
+      onDestroy: async () => {
+        throw new Error('Destroy error');
+      },
+    };
+
+    kernel.register(plugin, undefined, mockStore);
+
+    // Should not throw, just log error
+    await kernel.unregister('test');
+
+    expect(consoleErrorSpy).toHaveBeenCalled();
+    expect(kernel.plugins.has('test')).toBe(false);
+
+    consoleErrorSpy.mockRestore();
+  });
+
+  // Test lines 208-209: onStateChange error handling
+  it('should handle onStateChange errors gracefully', () => {
+    const kernel = createKernel();
+    const mockStore = {} as Store<any>;
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const plugin: Plugin = {
+      name: 'test',
+      version: '1.0.0',
+      install: vi.fn(),
+      onStateChange: () => {
+        throw new Error('StateChange error');
+      },
+    };
+
+    kernel.register(plugin, undefined, mockStore);
+
+    // Should not throw, just log error
+    kernel.emitStateChange({ count: 1 }, { count: 0 });
+
+    expect(consoleErrorSpy).toHaveBeenCalled();
+    consoleErrorSpy.mockRestore();
+  });
+
+  // Test lines 227-228: plugin onError error handling
+  it('should handle plugin onError errors gracefully', () => {
+    const kernel = createKernel();
+    const mockStore = {} as Store<any>;
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const plugin: Plugin = {
+      name: 'test',
+      version: '1.0.0',
+      install: vi.fn(),
+      onError: () => {
+        throw new Error('Error handler error');
+      },
+    };
+
+    kernel.register(plugin, undefined, mockStore);
+
+    const error = new Error('Test error');
+
+    // Should not throw, just log error
+    kernel.emitError(error);
+
+    expect(consoleErrorSpy).toHaveBeenCalled();
+    consoleErrorSpy.mockRestore();
+  });
+
+  // Test lines 236-237: error handler error handling
+  it('should handle error handler errors gracefully', () => {
+    const kernel = createKernel();
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const badHandler = () => {
+      throw new Error('Bad handler error');
+    };
+
+    kernel.onError(badHandler);
+
+    const error = new Error('Test error');
+
+    // Should not throw, just log error
+    kernel.emitError(error);
+
+    expect(consoleErrorSpy).toHaveBeenCalled();
+    consoleErrorSpy.mockRestore();
+  });
+
+  // Test line 250-251: onError return function
+  it('should return unsubscribe function from onError', () => {
+    const kernel = createKernel();
+    const handler1 = vi.fn();
+    const handler2 = vi.fn();
+
+    const unsubscribe = kernel.onError(handler1);
+
+    expect(typeof unsubscribe).toBe('function');
+
+    // Add second error handler
+    kernel.onError(handler2);
+    expect(kernel.errorHandlers.size).toBe(2);
+
+    // Remove first handler
+    unsubscribe();
+    expect(kernel.errorHandlers.size).toBe(1);
+  });
+
+  // Test EventBus cleanup
+  it('should cleanup EventBus listeners', () => {
+    const kernel = createKernel();
+    const handler = vi.fn();
+
+    kernel.on('testEvent', handler);
+    kernel.eventBus.emit('testEvent', {});
+
+    expect(handler).toHaveBeenCalledTimes(1);
+
+    // Destroy kernel
+    kernel.destroy();
+
+    // Listeners should be cleared
+    expect(kernel.eventBus.listeners.size).toBe(0);
+  });
+});
