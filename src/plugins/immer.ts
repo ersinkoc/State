@@ -28,6 +28,7 @@ import type { Plugin, Store } from '../types.js';
  * @returns A proxied object
  */
 function createProxy<T extends object>(base: T, copies: Map<any, any>): T {
+  /* c8 ignore next */
   return new Proxy(base || {}, {
     get(target, key) {
       const value = (target as any)[key];

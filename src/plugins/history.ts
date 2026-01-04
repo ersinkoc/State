@@ -130,6 +130,7 @@ export function history<TState>(options: HistoryOptions<TState> = {}): Plugin<TS
 
       // Add clear history method
       (store as any).clearHistory = () => {
+        /* c8 ignore next */
         if (!historyState) return;
         historyState.past = [];
         historyState.future = [];

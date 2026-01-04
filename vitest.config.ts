@@ -14,7 +14,10 @@ export default defineConfig({
         'tests/',
         'website/',
         'examples/',
+        'dist/',
         '*.config.*',
+        'src/plugins/types.ts',
+        'src/types.ts',
       ],
       thresholds: {
         lines: 100,

@@ -191,4 +191,21 @@ describe('batch-context error handling', () => {
     expect(stores).toBeInstanceOf(Set);
     expect(managedStores).toBeInstanceOf(Set);
   });
+
+  // Test sharedBatchContext.depth getter
+  it('should access depth getter on sharedBatchContext', () => {
+    const context = getBatchContext();
+
+    // Initially depth should be 0
+    expect(context.depth).toBe(0);
+
+    // During batch, depth should be > 0
+    const store = createStore({ count: 0 });
+    context.batch(store, () => {
+      expect(context.depth).toBe(1);
+    });
+
+    // After batch, depth should be 0 again
+    expect(context.depth).toBe(0);
+  });
 });

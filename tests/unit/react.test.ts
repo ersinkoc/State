@@ -232,9 +232,6 @@ describe('useStore - coverage tests', () => {
   });
 });
 
-// Note: isServer (lines 119-121) is an internal function used by hooks
-// It is tested indirectly through useCreateStore behavior
-
 describe('useAction - coverage tests', () => {
   // Test lines 207-208, 216-217: ref updates
   it('should update action ref when action changes', () => {

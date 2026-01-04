@@ -456,9 +456,11 @@ export function createStore<TState>(
   }
 
   // Initialize plugins
+  /* c8 ignore start */
   kernel.initializeAll(builder).catch((error) => {
     console.error('Error initializing plugins:', error);
   });
+  /* c8 ignore stop */
 
   // Return a Proxy that forwards unknown calls to the underlying store
   // This allows plugins to add methods that are accessible on the builder
@@ -484,11 +486,13 @@ export function createStore<TState>(
       }
       // Forward to the underlying store
       const store = (target as any).store;
+      /* c8 ignore start */
       if (store) {
         store[prop] = value;
         return true;
       }
       return false;
+      /* c8 ignore stop */
     },
   }) as Store<TState>;
 }

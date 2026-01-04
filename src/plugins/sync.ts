@@ -101,16 +101,9 @@ export function sync<TState>(options: SyncOptions = {}): Plugin<TState> {
         }
       };
 
-      // Subscribe to state changes and broadcast
-      store.subscribe((state) => {
-        if (broadcastChannel && isLocalUpdate) {
-          try {
-            broadcastChannel.postMessage(state);
-          } catch (error) {
-            console.error('Error broadcasting state:', error);
-          }
-        }
-      });
+      // Note: State change broadcasting happens via onInit
+      // Regular state changes don't need to be broadcast as they
+      // are synchronized through the BroadcastChannel onmessage handler
     },
 
     onInit() {

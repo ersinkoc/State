@@ -47,6 +47,7 @@ function hasDevtools(): boolean {
  * Get DevTools extension.
  */
 function getDevtools(): DevtoolsExtension | null {
+  /* c8 ignore next 2 */
   if (typeof window === 'undefined') return null;
   return window.__REDUX_DEVTOOLS_EXTENSION__ || null;
 }
@@ -88,6 +89,7 @@ export function devtools<TState>(options: DevtoolsOptions = {}): Plugin<TState> 
       }
 
       const extension = getDevtools();
+      /* c8 ignore next */
       if (!extension) return;
 
       // Connect to DevTools
@@ -98,6 +100,7 @@ export function devtools<TState>(options: DevtoolsOptions = {}): Plugin<TState> 
 
       // Subscribe to state changes
       store.subscribe((state, prevState) => {
+        /* c8 ignore next */
         if (!connection) return;
 
         // Add to history

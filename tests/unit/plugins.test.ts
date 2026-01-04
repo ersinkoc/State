@@ -2021,6 +2021,58 @@ describe('history plugin - edge case coverage tests', () => {
   });
 });
 
+describe('persist plugin - direct storage function tests', () => {
+  // Test lines 60-66: sessionStorage.removeItem exported function directly
+  it('should call exported sessionStorage.removeItem successfully', () => {
+    const mockSessionStorageApi = {
+      getItem: vi.fn(() => null),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+    };
+    (global as any).window = { sessionStorage: mockSessionStorageApi };
+
+    // Call the exported sessionStorage.removeItem directly
+    expect(() => sessionStorage.removeItem('test-key')).not.toThrow();
+
+    // Verify the underlying sessionStorage.removeItem was called
+    expect(mockSessionStorageApi.removeItem).toHaveBeenCalledWith('test-key');
+
+    delete (global as any).window;
+  });
+
+  // Test lines 90-96: sessionStorage.removeItem when window is undefined
+  it('should handle sessionStorage.removeItem when window is undefined', () => {
+    // Save and delete window
+    const originalWindow = (global as any).window;
+    delete (global as any).window;
+
+    // Call removeItem directly - should not throw when window is undefined
+    expect(() => sessionStorage.removeItem('test-key')).not.toThrow();
+
+    // Restore window
+    if (originalWindow) {
+      (global as any).window = originalWindow;
+    }
+  });
+
+  // Test lines 90-96: sessionStorage.removeItem catch block
+  it('should handle sessionStorage.removeItem errors gracefully', () => {
+    const mockSessionStorageApi = {
+      getItem: vi.fn(() => null),
+      setItem: vi.fn(),
+      removeItem: vi.fn(() => {
+        throw new Error('sessionStorage removeItem failed');
+      }),
+    };
+    (global as any).window = { sessionStorage: mockSessionStorageApi };
+
+    // Call removeItem directly - should not throw despite error
+    expect(() => sessionStorage.removeItem('test-key')).not.toThrow();
+
+    delete (global as any).window;
+  });
+});
+
 describe('persist plugin - edge case coverage tests', () => {
   // Test lines 75-77: sessionStorage getItem catch block
   it('should catch sessionStorage getItem errors during hydration', () => {
@@ -2207,7 +2259,183 @@ describe('sync plugin - final line coverage tests', () => {
 });
 
 describe('immer plugin - final line coverage tests', () => {
-  // Test lines 92-93: finalize nested objects in copies
+  // Test lines 92-93: finalize nested objects when ROOT is in copies
+  it('should finalize nested objects when root is mutated directly', () => {
+    const state = {
+      nested: {
+        value: 1
+      },
+      other: {
+        count: 0
+      }
+    };
+
+    const newState = produce(state, (draft: any) => {
+      // Directly mutate root object to put it in copies
+      draft.newProp = 'added';
+      // Now when finalize(root, copies) is called:
+      // 1. root IS in copies (because we set draft.newProp)
+      // 2. copy.nested is an object, so line 92-93 should execute
+    });
+
+    // The nested structure should be preserved after finalization
+    expect(newState.nested).toBeDefined();
+    expect(newState.nested.value).toBe(1);
+    expect(newState.other).toBeDefined();
+    expect(newState.other.count).toBe(0);
+    expect(newState.newProp).toBe('added');
+  });
+
+  // Test lines 92-93: finalize multiple nested objects in root copy
+  it('should finalize all nested objects when root is in copies', () => {
+    const state = {
+      user: {
+        name: 'John'
+      },
+      settings: {
+        theme: 'dark'
+      },
+      data: {
+        items: [1, 2, 3]  // Array should not trigger recursive finalize
+      }
+    };
+
+    const newState = produce(state, (draft: any) => {
+      // Add property to root to put it in copies
+      draft.timestamp = Date.now();
+    });
+
+    // All nested objects should be preserved
+    expect(newState.user).toBeDefined();
+    expect(newState.user.name).toBe('John');
+    expect(newState.settings).toBeDefined();
+    expect(newState.settings.theme).toBe('dark');
+    expect(Array.isArray(newState.data.items)).toBe(true);
+  });
+
+  // Test lines 92-93: finalize nested objects in copies (direct property mutation)
+  it('should finalize nested objects when parent is mutated first', () => {
+    const state = {
+      data: {
+        nested: {
+          value: 1
+        },
+        other: {
+          count: 0
+        }
+      }
+    };
+
+    const newState = produce(state, (draft: any) => {
+      // First mutate the data object itself to put it in copies
+      draft.data.newProp = 'added';
+      // The nested objects should be finalized when parent is processed
+    });
+
+    // The nested structure should be preserved
+    expect(newState.data.nested).toBeDefined();
+    expect(newState.data.other).toBeDefined();
+  });
+
+  // Test lines 92-93: finalize nested objects when they exist in a copied parent
+  it('should recursively finalize nested object properties', () => {
+    const state = {
+      container: {
+        child1: {
+          prop: 'a'
+        },
+        child2: {
+          prop: 'b'
+        }
+      }
+    };
+
+    const newState = produce(state, (draft: any) => {
+      // Mutate container to trigger copy
+      draft.container.child1.prop = 'updated';
+    });
+
+    // Both children should be accessible after finalization
+    expect(newState.container.child1).toBeDefined();
+    expect(newState.container.child2).toBeDefined();
+  });
+
+  // Test lines 92-93: finalize with Object.prototype.hasOwnProperty check
+  it('should only finalize own properties of copied objects', () => {
+    const state = {
+      obj: {
+        ownProp: {
+          value: 1
+        }
+      }
+    };
+
+    const newState = produce(state, (draft: any) => {
+      draft.obj.ownProp.value = 2;
+    });
+
+    expect(newState.obj.ownProp).toBeDefined();
+  });
+
+  // Test lines 92-93: finalize skips arrays
+  it('should not recursively finalize arrays in finalize function', () => {
+    const state = {
+      data: {
+        items: [1, 2, 3],
+        nested: { val: 1 }
+      }
+    };
+
+    const newState = produce(state, (draft: any) => {
+      draft.data.nested.val = 2;
+    });
+
+    // Arrays should remain as-is
+    expect(Array.isArray(newState.data.items)).toBe(true);
+  });
+
+  // Test lines 92-93: finalize skips null values
+  it('should not recursively finalize null values', () => {
+    const state = {
+      data: {
+        nullProp: null,
+        nested: { val: 1 }
+      }
+    };
+
+    const newState = produce(state, (draft: any) => {
+      draft.data.nested.val = 2;
+    });
+
+    // Null should remain null
+    expect(newState.data.nullProp).toBeNull();
+  });
+
+  // Test lines 92-93: finalize with deep nesting that triggers recursive call
+  it('should finalize deeply nested objects recursively', () => {
+    const state = {
+      level1: {
+        level2: {
+          level3: {
+            value: 'original'
+          }
+        }
+      }
+    };
+
+    const newState = produce(state, (draft: any) => {
+      // This triggers the proxy to copy level1
+      draft.level1.level2.level3.value = 'modified';
+    });
+
+    // All levels should be present after finalization
+    expect(newState).toBeDefined();
+    expect(newState.level1).toBeDefined();
+    expect(newState.level1.level2).toBeDefined();
+    expect(newState.level1.level2.level3).toBeDefined();
+  });
+
+  // Test lines 92-93: finalize nested objects when parent is in copies
   it('should finalize nested objects when parent is in copies', () => {
     const state = {
       user: {

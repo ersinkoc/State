@@ -110,17 +110,6 @@ export function useStore<TState, TSelected = TState>(
 }
 
 /**
- * Check if the code is running on the server.
- *
- * @returns true if running on server
- *
- * @internal
- */
-function isServer(): boolean {
-  return typeof window === 'undefined';
-}
-
-/**
  * React hook for creating and using a store.
  *
  * Creates a store on first render and destroys it on unmount.
