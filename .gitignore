@@ -27,6 +27,7 @@ yarn-error.log*
 # Environment
 .env
 .env.local
+.env.*
 
 # Website
 website/node_modules/
@@ -36,3 +37,9 @@ website/.vite/
 # Temporary
 *.tmp
 .cache/
+
+# Playwright MCP
+.playwright-mcp/
+
+# Misc
+*.tgz

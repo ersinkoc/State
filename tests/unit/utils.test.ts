@@ -298,6 +298,25 @@ describe('identity', () => {
 });
 
 describe('deepMerge - coverage tests', () => {
+  // Test lines 94-95: cloneValue returns non-plain objects as-is
+  // Note: Special objects (RegExp, Map, Set) are returned as-is by cloneValue
+  // but deepClone also returns them as-is, so they come from the target
+  it('should preserve special objects from source', () => {
+    const regex = /test2/g;
+    const map = new Map([['key2', 'value2']]);
+    const set = new Set([4, 5, 6]);
+
+    const target = { a: 1 };
+    const source = { regex, map, set };
+
+    const result = deepMerge(target, source);
+
+    // Special objects should be from source (returned as-is by cloneValue)
+    expect(result.regex).toBe(regex);
+    expect(result.map).toBe(map);
+    expect(result.set).toBe(set);
+  });
+
   // Test lines 42-44: Date object handling in main loop
   it('should handle Date objects in source', () => {
     const date = new Date('2024-01-01');

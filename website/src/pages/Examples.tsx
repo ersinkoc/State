@@ -1,88 +1,138 @@
-import { CodeBlock } from '../components/CodeBlock';
+import { CodeBlock } from '@/components/code/CodeBlock';
+import { EXAMPLES } from '@/lib/constants';
+import { FolderOpen } from 'lucide-react';
 
-export function Examples() {
-  const counterCode = `import { createStore } from '@oxog/state';
+const counterCode = `import { createStore, useStore } from '@oxog/state';
 
-const store = createStore({
+const counterStore = createStore({
   count: 0,
-  $increment: (s) => ({ count: s.count + 1 }),
-  $decrement: (s) => ({ count: s.count - 1 }),
+  increment: (state) => ({ count: state.count + 1 }),
+  decrement: (state) => ({ count: state.count - 1 }),
+  reset: () => ({ count: 0 }),
 });
 
-store.increment();
-console.log(store.getState().count); // 1`;
-
-  const asyncCode = `const store = createStore({
-  data: null,
-  loading: false,
-  $fetch: async (s, url) => {
-    store.setState({ loading: true });
-    const res = await fetch(url);
-    const data = await res.json();
-    return { data, loading: false };
-  },
-});
-
-await store.fetch('/api/users');`;
-
-  const persistCode = `import { persist } from '@oxog/state';
-
-const store = createStore({ count: 0 })
-  .use(persist({ key: 'my-app' }));`;
-
-  const historyCode = `import { history } from '@oxog/state';
-
-const store = createStore({ count: 0 })
-  .use(history({ limit: 50 }));
-
-store.setState({ count: 1 });
-store.setState({ count: 2 });
-
-store.undo(); // { count: 1 }
-store.redo(); // { count: 2 }`;
-
-  const examples = [
-    {
-      title: 'Counter',
-      description: 'Basic counter with increment/decrement actions.',
-      code: counterCode,
-    },
-    {
-      title: 'Async Data Fetching',
-      description: 'Handle async operations with loading states.',
-      code: asyncCode,
-    },
-    {
-      title: 'Persistence',
-      description: 'Persist state to localStorage automatically.',
-      code: persistCode,
-    },
-    {
-      title: 'Undo/Redo',
-      description: 'Add time-travel debugging with history plugin.',
-      code: historyCode,
-    },
-  ];
+function Counter() {
+  const count = useStore(counterStore, (s) => s.count);
+  const increment = useStore(counterStore, (s) => s.increment);
+  const decrement = useStore(counterStore, (s) => s.decrement);
+  const reset = useStore(counterStore, (s) => s.reset);
 
   return (
-    <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-12">
-      <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-4">
-        Examples
-      </h1>
-      <p className="text-gray-600 dark:text-gray-400 mb-8">
-        Practical examples to help you get started with @oxog/state.
-      </p>
+    <div>
+      <h1>Count: {count}</h1>
+      <button onClick={increment}>+</button>
+      <button onClick={decrement}>-</button>
+      <button onClick={reset}>Reset</button>
+    </div>
+  );
+}`;
 
-      <div className="space-y-12">
-        {examples.map((example) => (
-          <section key={example.title}>
-            <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mb-2">
-              {example.title}
-            </h2>
-            <p className="text-gray-600 dark:text-gray-400 mb-4">{example.description}</p>
-            <CodeBlock code={example.code} language="typescript" />
-          </section>
+const todoListCode = `import { createStore, useStore } from '@oxog/state';
+
+type Todo = { id: number; text: string; done: boolean };
+
+const todoStore = createStore({
+  todos: [] as Todo[],
+  addTodo: (state, text: string) => ({
+    todos: [...state.todos, { id: Date.now(), text, done: false }],
+  }),
+  toggleTodo: (state, id: number) => ({
+    todos: state.todos.map(todo =>
+      todo.id === id ? { ...todo, done: !todo.done } : todo
+    ),
+  }),
+  removeTodo: (state, id: number) => ({
+    todos: state.todos.filter(todo => todo.id !== id),
+  }),
+});
+
+function TodoList() {
+  const todos = useStore(todoStore, (s) => s.todos);
+  const addTodo = useStore(todoStore, (s) => s.addTodo);
+  const toggleTodo = useStore(todoStore, (s) => s.toggleTodo);
+  const removeTodo = useStore(todoStore, (s) => s.removeTodo);
+
+  const [input, setInput] = useState('');
+
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    if (input.trim()) {
+      addTodo(input.trim());
+      setInput('');
+    }
+  };
+
+  return (
+    <div>
+      <form onSubmit={handleSubmit}>
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder="Add a todo..."
+        />
+        <button type="submit">Add</button>
+      </form>
+
+      <ul>
+        {todos.map(todo => (
+          <li key={todo.id}>
+            <input
+              type="checkbox"
+              checked={todo.done}
+              onChange={() => toggleTodo(todo.id)}
+            />
+            <span style={{ textDecoration: todo.done ? 'line-through' : 'none' }}>
+              {todo.text}
+            </span>
+            <button onClick={() => removeTodo(todo.id)}>Remove</button>
+          </li>
         ))}
+      </ul>
+    </div>
+  );
+}`;
+
+export function Examples() {
+  return (
+    <div className="container max-w-screen-xl mx-auto px-4 py-12">
+      <div className="max-w-4xl mx-auto">
+        <h1 className="text-4xl font-bold mb-4">Examples</h1>
+        <p className="text-xl text-muted-foreground mb-8">
+          Learn by example with common use cases
+        </p>
+
+        <div className="prose prose-slate dark:prose-invert max-w-none">
+          {EXAMPLES.map((section) => (
+            <div key={section.category} className="mb-12">
+              <h2 className="text-2xl font-semibold mb-4 flex items-center gap-2">
+                <FolderOpen className="w-6 h-6 text-primary" />
+                {section.category}
+              </h2>
+              <div className="space-y-6">
+                {section.items.map((item) => (
+                  <div
+                    key={item.href}
+                    id={item.href.split('#')[1]}
+                    className="scroll-mt-20"
+                  >
+                    <h3 className="text-xl font-semibold mb-2">{item.title}</h3>
+                    {item.title === 'Counter' && (
+                      <CodeBlock code={counterCode} language="typescript" filename="Counter.tsx" />
+                    )}
+                    {item.title === 'Todo List' && (
+                      <CodeBlock code={todoListCode} language="typescript" filename="TodoList.tsx" />
+                    )}
+                    {item.title !== 'Counter' && item.title !== 'Todo List' && (
+                      <div className="p-4 border border-border rounded-lg bg-muted/50 text-muted-foreground">
+                        Full example coming soon. Check the GitHub repository for more examples.
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
