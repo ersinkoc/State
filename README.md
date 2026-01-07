@@ -11,7 +11,9 @@ Zero-dependency reactive state management for any framework.
 - **Zero Dependencies** - No runtime dependencies, smaller bundle size
 - **Framework Agnostic** - Works with React, Vue, Svelte, or vanilla JS
 - **TypeScript Native** - Built with strict mode, full type inference
-- **Plugin System** - Extend with persist, devtools, history, sync, immer
+- **Plugin System** - Extend with persist, devtools, history, sync, logger, effects, validate
+- **Slices & Computed** - Modular state organization with derived values
+- **Store Federation** - Combine multiple stores for large applications
 - **Tiny Bundle** - Less than 2KB gzipped for core
 
 ## Installation
@@ -36,8 +38,8 @@ import { createStore, useStore } from '@oxog/state';
 // Create a store with state and actions
 const store = createStore({
   count: 0,
-  increment: (state) => ({ count: state.count + 1 }),
-  decrement: (state) => ({ count: state.count - 1 }),
+  $increment: (state) => ({ count: state.count + 1 }),
+  $decrement: (state) => ({ count: state.count - 1 }),
 });
 
 // Use in React
@@ -50,29 +52,22 @@ function Counter() {
 
 // Use in vanilla JS
 store.subscribe((state) => console.log(state.count));
-store.increment();
+store.getState().increment();
 ```
 
 ## API Reference
 
 ### Core
 
-#### `createStore(initialState, actions?)`
+#### `createStore(initialState)`
 
 Creates a reactive store.
 
 ```typescript
-// Inline actions
 const store = createStore({
   count: 0,
-  increment: (state) => ({ count: state.count + 1 }),
+  $increment: (state) => ({ count: state.count + 1 }),
 });
-
-// Separate actions
-const store = createStore(
-  { count: 0 },
-  { increment: (state) => ({ count: state.count + 1 }) }
-);
 ```
 
 #### `batch(fn)`
@@ -117,6 +112,80 @@ const count = useStore(store, (s) => s.count);
 const user = useStore(store, (s) => s.user, deepEqual);
 ```
 
+#### `useShallow(selector)` <sup>v1.2</sup>
+
+Wrap selectors returning objects to use shallow equality comparison.
+
+```typescript
+import { useStore, useShallow } from '@oxog/state';
+
+// Without useShallow - re-renders on any state change
+// const data = useStore(store, s => ({ a: s.a, b: s.b }));
+
+// With useShallow - only re-renders when values change
+const data = useStore(store, useShallow(s => ({ a: s.a, b: s.b })));
+```
+
+#### `useStoreSelector(store, selectors)` <sup>v1.2</sup>
+
+Select multiple values with independent subscriptions.
+
+```typescript
+import { useStoreSelector } from '@oxog/state';
+
+const { userCount, totalRevenue } = useStoreSelector(store, {
+  userCount: s => s.users.length,
+  totalRevenue: s => s.orders.reduce((sum, o) => sum + o.total, 0),
+});
+```
+
+#### `useStoreActions(store, ...actionNames)` <sup>v1.2</sup>
+
+Get multiple actions with stable references.
+
+```typescript
+import { useStoreActions } from '@oxog/state';
+
+const { increment, decrement, reset } = useStoreActions(
+  store,
+  'increment', 'decrement', 'reset'
+);
+```
+
+#### `useSetState(store)` <sup>v1.2</sup>
+
+Get a stable setState function for partial updates.
+
+```typescript
+import { useSetState } from '@oxog/state';
+
+function Form() {
+  const setState = useSetState(store);
+
+  return (
+    <input onChange={(e) => setState({ name: e.target.value })} />
+  );
+}
+```
+
+#### `useTransientSubscribe(store, selector, callback)` <sup>v1.2</sup>
+
+Subscribe to state changes without causing re-renders.
+
+```typescript
+import { useTransientSubscribe } from '@oxog/state';
+
+function Analytics() {
+  useTransientSubscribe(
+    store,
+    s => s.pageViews,
+    (views) => analytics.track('page_view', { count: views })
+  );
+
+  return <div>Tracking active</div>;
+}
+```
+
 #### `useCreateStore(initialState)`
 
 Create a store scoped to component lifecycle.
@@ -136,24 +205,105 @@ Get a stable action reference.
 const increment = useAction(store, 'increment');
 ```
 
+## Patterns <sup>v1.2</sup>
+
+### Slices
+
+Organize state into modular, reusable slices.
+
+```typescript
+import { createStore, createSlice } from '@oxog/state';
+
+const userSlice = createSlice('user', {
+  name: '',
+  email: '',
+  $login: (state, name: string, email: string) => ({ name, email }),
+  $logout: () => ({ name: '', email: '' }),
+});
+
+const cartSlice = createSlice('cart', {
+  items: [],
+  $addItem: (state, item) => ({ items: [...state.items, item] }),
+});
+
+const store = createStore({
+  ...userSlice,
+  ...cartSlice,
+});
+
+// Access: store.getState().user.name
+// Action: store.getState().user.login('John', 'john@example.com')
+```
+
+### Computed Values
+
+Derive values from state with automatic memoization.
+
+```typescript
+import { createStore, computed } from '@oxog/state';
+
+const store = createStore({
+  items: [{ price: 10, qty: 2 }, { price: 20, qty: 1 }],
+
+  totalItems: computed((state) =>
+    state.items.reduce((sum, i) => sum + i.qty, 0)
+  ),
+
+  totalPrice: computed((state) =>
+    state.items.reduce((sum, i) => sum + i.price * i.qty, 0)
+  ),
+});
+
+console.log(store.getState().totalItems); // 3
+console.log(store.getState().totalPrice); // 40
+```
+
+### Store Federation
+
+Combine multiple stores into a unified interface.
+
+```typescript
+import { createStore, createFederation } from '@oxog/state';
+
+const userStore = createStore({ name: 'John' });
+const cartStore = createStore({ items: [] });
+const settingsStore = createStore({ theme: 'dark' });
+
+const federation = createFederation({
+  user: userStore,
+  cart: cartStore,
+  settings: settingsStore,
+});
+
+// Access all stores
+const state = federation.getState();
+console.log(state.user.name, state.cart.items, state.settings.theme);
+
+// Subscribe to specific store
+federation.subscribeStore('user', (userState) => {
+  console.log('User changed:', userState);
+});
+```
+
 ## Plugins
 
 ### Persist
 
-Persist state to localStorage or custom storage.
+Persist state to localStorage with advanced options.
 
 ```typescript
 import { persist } from '@oxog/state';
 
-const store = createStore({ count: 0 })
-  .use(persist({ key: 'my-app' }));
-
-// With options
 const store = createStore({ count: 0, temp: '' })
   .use(persist({
     key: 'my-app',
-    storage: sessionStorage,
-    whitelist: ['count'], // Only persist count
+    storage: localStorage,
+    // v1.2.0 options
+    version: 1,
+    migrate: (state, version) => state,
+    partialize: (state) => ({ count: state.count }), // Only persist count
+    writeDebounce: 100,
+    onRehydrateStorage: (state) => console.log('Hydrated:', state),
   }));
 ```
 
@@ -195,40 +345,67 @@ const store = createStore({ count: 0 })
   .use(sync({ channel: 'my-app' }));
 ```
 
-### Immer
+### Logger <sup>v1.2</sup>
 
-Use mutable syntax for immutable updates.
+Development logging with diff, timestamps, and filtering.
 
 ```typescript
-import { immer } from '@oxog/state';
+import { logger } from '@oxog/state';
 
-const store = createStore({
-  users: [{ id: 1, name: 'John' }],
-}).use(immer());
-
-store.setState((draft) => {
-  draft.users[0].name = 'Jane';
-  draft.users.push({ id: 2, name: 'Bob' });
-});
+const store = createStore({ count: 0 })
+  .use(logger({
+    level: 'debug',
+    collapsed: true,
+    diff: true,
+    timestamp: true,
+    filter: (action, state) => state.count > 0,
+  }));
 ```
 
-### Selector
+### Effects <sup>v1.2</sup>
 
-Add computed/derived values.
+Reactive side effects with debounce and cleanup.
 
 ```typescript
-import { selector } from '@oxog/state';
+import { effects, createEffect } from '@oxog/state';
 
 const store = createStore({
-  items: [],
-  filter: 'all',
-}).use(selector({
-  filteredItems: (state) => {
-    if (state.filter === 'all') return state.items;
-    return state.items.filter((i) => i.status === state.filter);
-  },
-  itemCount: (state) => state.items.length,
+  searchTerm: '',
+  results: [],
+})
+.use(effects({
+  search: createEffect(
+    (state) => state.searchTerm,
+    async (term, { setState, signal }) => {
+      const res = await fetch(`/api/search?q=${term}`, { signal });
+      const results = await res.json();
+      setState({ results });
+    },
+    { debounce: 300 }
+  ),
 }));
+```
+
+### Validate <sup>v1.2</sup>
+
+Schema-agnostic validation with Zod, Yup, or custom validators.
+
+```typescript
+import { validate } from '@oxog/state';
+import { z } from 'zod';
+
+const schema = z.object({
+  email: z.string().email(),
+  age: z.number().min(0).max(150),
+});
+
+const store = createStore({ email: '', age: 0 })
+  .use(validate({
+    schema,
+    timing: 'before',
+    rejectInvalid: true,
+    onError: (errors) => console.error(errors),
+  }));
 ```
 
 ## Async Actions
@@ -240,7 +417,7 @@ const store = createStore({
   data: null,
   loading: false,
   error: null,
-  fetch: async (state, url: string) => {
+  $fetch: async (state, url: string) => {
     store.setState({ loading: true, error: null });
     try {
       const res = await fetch(url);
@@ -252,7 +429,7 @@ const store = createStore({
   },
 });
 
-await store.fetch('/api/users');
+await store.getState().fetch('/api/users');
 ```
 
 ## TypeScript
@@ -260,23 +437,52 @@ await store.fetch('/api/users');
 Full TypeScript support with type inference.
 
 ```typescript
+import { createStore, createSlice, InferSliceState } from '@oxog/state';
+
+// Type inference from slices
+const counterSlice = createSlice('counter', {
+  count: 0,
+  $increment: (state) => ({ count: state.count + 1 }),
+});
+
+type CounterState = InferSliceState<typeof counterSlice>;
+// { counter: { count: number } }
+
+// Explicit types
 interface State {
   count: number;
   user: User | null;
 }
 
-interface Actions {
-  increment: (state: State) => Partial<State>;
-  setUser: (state: State, user: User) => Partial<State>;
-}
+const store = createStore<State>({
+  count: 0,
+  user: null,
+  $increment: (s) => ({ count: s.count + 1 }),
+  $setUser: (s, user: User) => ({ user }),
+});
+```
 
-const store = createStore<State, Actions>(
-  { count: 0, user: null },
-  {
-    increment: (s) => ({ count: s.count + 1 }),
-    setUser: (s, user) => ({ user }),
-  }
-);
+## Testing <sup>v1.2</sup>
+
+Testing utilities for stores.
+
+```typescript
+import { createTestStore, mockStore, getStoreSnapshot } from '@oxog/state/testing';
+
+// Isolated test store
+const store = createTestStore({
+  count: 0,
+  $increment: (s) => ({ count: s.count + 1 }),
+});
+
+// Mock store with action tracking
+const mock = mockStore({ count: 0, $increment: (s) => ({ count: s.count + 1 }) });
+mock.getState().increment();
+expect(mock.actionCalls.increment).toBe(1);
+
+// Snapshot testing
+const snapshot = getStoreSnapshot(store);
+expect(snapshot).toMatchSnapshot();
 ```
 
 ## Browser Support
