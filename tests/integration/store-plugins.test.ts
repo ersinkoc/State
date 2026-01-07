@@ -29,12 +29,12 @@ describe('store + persist integration', () => {
     // Should have history
     expect((store as any).canUndo()).toBe(true);
 
-    // Should persist
-    expect(mockStorage['test']).toBe(JSON.stringify({ count: 2 }));
+    // Should persist (versioned format)
+    expect(mockStorage['test']).toBe(JSON.stringify({ state: { count: 2 }, version: 0 }));
 
     // Undo should update storage
     (store as any).undo();
-    expect(mockStorage['test']).toBe(JSON.stringify({ count: 1 }));
+    expect(mockStorage['test']).toBe(JSON.stringify({ state: { count: 1 }, version: 0 }));
   });
 });
 
@@ -113,7 +113,7 @@ describe('multiple plugins', () => {
 
     store.setState({ count: 1 });
 
-    expect(mockStorage['test']).toBe(JSON.stringify({ count: 1 }));
+    expect(mockStorage['test']).toBe(JSON.stringify({ state: { count: 1 }, version: 0 }));
     expect(mockConnection.send).toHaveBeenCalled();
     expect((store as any).canUndo()).toBe(true);
 

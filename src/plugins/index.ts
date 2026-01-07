@@ -30,6 +30,37 @@ export { history, hasHistory } from './history.js';
 export { sync, triggerSync } from './sync.js';
 export { immer, produce } from './immer.js';
 export { selector } from './selector.js';
+export { logger, createLogger } from './logger.js';
+export type { LogLevel, LoggerOptions } from './logger.js';
+export {
+  effects,
+  createEffect,
+  createSimpleEffect,
+  combineEffects,
+  createDebouncedEffect,
+} from './effects.js';
+export type {
+  EffectCleanup,
+  EffectFn,
+  EffectUtils,
+  EffectDefinition,
+  EffectsOptions,
+} from './effects.js';
+export {
+  validate,
+  createValidator,
+  combineValidators,
+  createFieldValidator,
+  createAsyncValidator,
+} from './validate.js';
+export type {
+  ValidationError,
+  ValidationResult,
+  ValidatorFn,
+  ValidateOptions,
+  ValidationAPI,
+  ValidationTiming,
+} from './validate.js';
 
 // Re-export types
 export type {

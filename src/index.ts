@@ -33,7 +33,64 @@ export { createStore, batch, StoreError, StoreErrorCode } from './store.js';
 export type { Store, StoreBuilder, StoreOptions } from './store.js';
 
 // React
-export { useStore, useCreateStore, useAction } from './react.js';
+export {
+  useStore,
+  useCreateStore,
+  useAction,
+  useShallow,
+  useStoreActions,
+  useStoreSelector,
+  useTransientSubscribe,
+  useSetState,
+} from './react.js';
+
+// Enhanced subscription
+export {
+  subscribeWithOptions,
+  createSubscriber,
+  subscribeToMany,
+  subscribeOnce,
+} from './subscribe.js';
+export type { SubscribeOptions } from './subscribe.js';
+
+// Computed values
+export {
+  computed,
+  combineComputed,
+  memoizeSelector,
+} from './computed.js';
+export type { Computed, ComputedOptions } from './computed.js';
+
+// Slices pattern
+export {
+  createSlice,
+  combineSlices,
+  createNamespacedSlice,
+  extendStore,
+  resetSlices,
+} from './slices.js';
+export type {
+  SetSlice,
+  GetSlice,
+  SliceCreator,
+  SliceDefinition,
+} from './slices.js';
+
+// Store Federation
+export {
+  createFederation,
+  createFederatedSelector,
+  createFederatedComputed,
+  waitForFederated,
+} from './federation.js';
+export type {
+  StoreState,
+  FederatedState,
+  FederationListener,
+  TransactionFn,
+  FederationOptions,
+  Federation,
+} from './federation.js';
 
 // Plugins
 export {
@@ -43,6 +100,18 @@ export {
   sync,
   immer,
   selector,
+  logger,
+  createLogger,
+  effects,
+  createEffect,
+  createSimpleEffect,
+  combineEffects,
+  createDebouncedEffect,
+  validate,
+  createValidator,
+  combineValidators,
+  createFieldValidator,
+  createAsyncValidator,
   sessionStorage,
   createStorage,
   hasHistory,
@@ -84,3 +153,61 @@ export type {
   SelectorOptions,
   HistoryStore,
 } from './plugins/types.js';
+export type { LogLevel, LoggerOptions } from './plugins/logger.js';
+export type {
+  EffectCleanup,
+  EffectFn,
+  EffectUtils,
+  EffectDefinition,
+  EffectsOptions,
+} from './plugins/effects.js';
+export type {
+  ValidationError,
+  ValidationResult,
+  ValidatorFn,
+  ValidateOptions,
+  ValidationAPI,
+  ValidationTiming,
+} from './plugins/validate.js';
+
+// Testing utilities
+export {
+  createMockStorage,
+  spyOnStore,
+  assertState,
+  createTestStore,
+  delay,
+  flushMicrotasks,
+  mockAction,
+  snapshot,
+  stateDiff,
+} from './testing.js';
+export type {
+  MockStorage,
+  StateChange,
+  StoreSpy,
+  StateAssertion,
+  TestStoreOptions,
+  TestStore,
+  MockedAction,
+} from './testing.js';
+
+// Middleware compatibility
+export {
+  toMiddlewareApi,
+  middlewareCompat,
+  createWithMiddleware,
+  createSimpleMiddleware,
+  compose,
+} from './compat/index.js';
+export type {
+  MiddlewareSetState,
+  MiddlewareGetState,
+  MiddlewareSubscribe,
+  MiddlewareStoreApi,
+  StateCreatorFn,
+  MiddlewareFn,
+  ExtractStateType,
+  SelectorFn,
+  EqualityCheck,
+} from './compat/index.js';

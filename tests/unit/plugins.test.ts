@@ -54,7 +54,7 @@ describe('persist plugin', () => {
 
     store.setState({ count: 10 });
 
-    expect(mockStorage['test-key']).toBe(JSON.stringify({ count: 10 }));
+    expect(mockStorage['test-key']).toBe(JSON.stringify({ state: { count: 10 }, version: 0 }));
   });
 
   it('should whitelist keys', () => {
@@ -66,8 +66,8 @@ describe('persist plugin', () => {
     store.setState({ count: 5, temp: 'ignored' });
 
     const saved = JSON.parse(mockStorage['test-key']!);
-    expect(saved).toEqual({ count: 5 });
-    expect(saved.temp).toBeUndefined();
+    expect(saved).toEqual({ state: { count: 5 }, version: 0 });
+    expect(saved.state.temp).toBeUndefined();
   });
 
   it('should blacklist keys', () => {
@@ -79,8 +79,8 @@ describe('persist plugin', () => {
     store.setState({ count: 5, temp: 'ignored' });
 
     const saved = JSON.parse(mockStorage['test-key']!);
-    expect(saved).toEqual({ count: 5 });
-    expect(saved.temp).toBeUndefined();
+    expect(saved).toEqual({ state: { count: 5 }, version: 0 });
+    expect(saved.state.temp).toBeUndefined();
   });
 
   it('should handle storage errors gracefully', () => {
@@ -672,6 +672,428 @@ describe('persist plugin - coverage tests', () => {
     expect(typeof mockSessionStorage.removeItem).toBe('function');
 
     delete (global as any).window;
+  });
+
+  // Test encrypt/decrypt functionality (lines 296-298)
+  it('should encrypt state when persisting', () => {
+    const mockStorage: Record<string, string> = {};
+    const storage = {
+      getItem: (key: string) => mockStorage[key] || null,
+      setItem: (key: string, value: string) => {
+        mockStorage[key] = value;
+      },
+      removeItem: (key: string) => {
+        delete mockStorage[key];
+      },
+    };
+
+    const encrypt = vi.fn((data: string) => `encrypted:${data}`);
+    const decrypt = vi.fn((data: string) => data.replace('encrypted:', ''));
+
+    const store = createStore({ count: 0 }).use(
+      persist({
+        key: 'encrypted-test',
+        storage,
+        encrypt,
+        decrypt,
+      })
+    );
+
+    store.setState({ count: 5 });
+
+    // Verify encrypt was called
+    expect(encrypt).toHaveBeenCalled();
+
+    // Verify stored data is encrypted
+    expect(mockStorage['encrypted-test']).toContain('encrypted:');
+  });
+
+  it('should decrypt state when hydrating', () => {
+    const mockStorage: Record<string, string> = {};
+    const storage = {
+      getItem: (key: string) => mockStorage[key] || null,
+      setItem: (key: string, value: string) => {
+        mockStorage[key] = value;
+      },
+      removeItem: (key: string) => {
+        delete mockStorage[key];
+      },
+    };
+
+    const encrypt = vi.fn((data: string) => `encrypted:${data}`);
+    const decrypt = vi.fn((data: string) => data.replace('encrypted:', ''));
+
+    // Pre-populate storage with encrypted data
+    mockStorage['encrypted-test'] = 'encrypted:' + JSON.stringify({ state: { count: 10 }, version: 0 });
+
+    const store = createStore({ count: 0 }).use(
+      persist({
+        key: 'encrypted-test',
+        storage,
+        encrypt,
+        decrypt,
+      })
+    );
+
+    // Verify decrypt was called
+    expect(decrypt).toHaveBeenCalled();
+
+    // Verify state was hydrated correctly
+    expect(store.getState().count).toBe(10);
+  });
+
+  it('should handle decrypt errors gracefully', () => {
+    const mockStorage: Record<string, string> = {};
+    const storage = {
+      getItem: (key: string) => mockStorage[key] || null,
+      setItem: (key: string, value: string) => {
+        mockStorage[key] = value;
+      },
+      removeItem: (key: string) => {
+        delete mockStorage[key];
+      },
+    };
+
+    const decrypt = vi.fn(() => {
+      throw new Error('Decryption failed');
+    });
+
+    // Pre-populate storage with invalid encrypted data
+    mockStorage['encrypted-test'] = 'invalid-encrypted-data';
+
+    const store = createStore({ count: 0 }).use(
+      persist({
+        key: 'encrypted-test',
+        storage,
+        decrypt,
+      })
+    );
+
+    // Should fall back to initial state when decryption fails
+    expect(store.getState().count).toBe(0);
+  });
+
+  // Test onPersistError callback (line 303)
+  it('should call onPersistError when persist fails', () => {
+    const onPersistError = vi.fn();
+    const mockStorage = {
+      getItem: () => null,
+      setItem: () => {
+        throw new Error('Storage full');
+      },
+      removeItem: () => {},
+    };
+
+    const store = createStore({ count: 0 }).use(
+      persist({
+        key: 'test',
+        storage: mockStorage,
+        onPersistError,
+      })
+    );
+
+    store.setState({ count: 1 });
+
+    // Verify onPersistError was called instead of console.error
+    expect(onPersistError).toHaveBeenCalled();
+    expect(onPersistError).toHaveBeenCalledWith(expect.any(Error));
+  });
+
+  // Test writeDebounce functionality (lines 312, 316-317)
+  it('should debounce writes when writeDebounce is set', async () => {
+    vi.useFakeTimers();
+
+    const mockStorage: Record<string, string> = {};
+    const setItemSpy = vi.fn((key: string, value: string) => {
+      mockStorage[key] = value;
+    });
+    const storage = {
+      getItem: (key: string) => mockStorage[key] || null,
+      setItem: setItemSpy,
+      removeItem: (key: string) => {
+        delete mockStorage[key];
+      },
+    };
+
+    const store = createStore({ count: 0 }).use(
+      persist({
+        key: 'debounce-test',
+        storage,
+        writeDebounce: 100,
+      })
+    );
+
+    // Multiple rapid state updates
+    store.setState({ count: 1 });
+    store.setState({ count: 2 });
+    store.setState({ count: 3 });
+
+    // Before debounce timeout, setItem should not be called
+    expect(setItemSpy).not.toHaveBeenCalled();
+
+    // Advance timer past debounce delay
+    vi.advanceTimersByTime(150);
+
+    // Now setItem should have been called once
+    expect(setItemSpy).toHaveBeenCalledTimes(1);
+
+    // Verify final state was persisted
+    const persistedData = JSON.parse(mockStorage['debounce-test']);
+    expect(persistedData.state.count).toBe(3);
+
+    vi.useRealTimers();
+  });
+
+  // Test onDestroy cancels debounce (lines 325-326)
+  it('should cancel debounced writes on destroy', async () => {
+    vi.useFakeTimers();
+
+    const mockStorage: Record<string, string> = {};
+    const setItemSpy = vi.fn((key: string, value: string) => {
+      mockStorage[key] = value;
+    });
+    const storage = {
+      getItem: (key: string) => mockStorage[key] || null,
+      setItem: setItemSpy,
+      removeItem: (key: string) => {
+        delete mockStorage[key];
+      },
+    };
+
+    const store = createStore({ count: 0 }).use(
+      persist({
+        key: 'debounce-destroy-test',
+        storage,
+        writeDebounce: 100,
+      })
+    );
+
+    // Trigger state update
+    store.setState({ count: 1 });
+
+    // Destroy store before debounce completes
+    store.destroy();
+
+    // Advance timer past debounce delay
+    vi.advanceTimersByTime(150);
+
+    // setItem should not have been called because store was destroyed
+    expect(setItemSpy).not.toHaveBeenCalled();
+
+    vi.useRealTimers();
+  });
+
+  // Test onRehydrateStorage callback (lines 241-243)
+  it('should call onRehydrateStorage when hydrating state', () => {
+    const onRehydrateStorage = vi.fn();
+    const mockStorage: Record<string, string> = {
+      'test': JSON.stringify({ state: { count: 5 }, version: 0 }),
+    };
+    const storage = {
+      getItem: (key: string) => mockStorage[key] || null,
+      setItem: (key: string, value: string) => {
+        mockStorage[key] = value;
+      },
+      removeItem: (key: string) => {
+        delete mockStorage[key];
+      },
+    };
+
+    createStore({ count: 0 }).use(
+      persist({
+        key: 'test',
+        storage,
+        onRehydrateStorage,
+      })
+    );
+
+    expect(onRehydrateStorage).toHaveBeenCalledWith({ count: 5 });
+  });
+
+  // Test onHydrationComplete callback (lines 260-262)
+  it('should call onHydrationComplete after hydration', () => {
+    const onHydrationComplete = vi.fn();
+    const mockStorage: Record<string, string> = {
+      'test': JSON.stringify({ state: { count: 5 }, version: 0 }),
+    };
+    const storage = {
+      getItem: (key: string) => mockStorage[key] || null,
+      setItem: (key: string, value: string) => {
+        mockStorage[key] = value;
+      },
+      removeItem: (key: string) => {
+        delete mockStorage[key];
+      },
+    };
+
+    const store = createStore({ count: 0 }).use(
+      persist({
+        key: 'test',
+        storage,
+        onHydrationComplete,
+      })
+    );
+
+    expect(onHydrationComplete).toHaveBeenCalledWith({ count: 5 });
+  });
+
+  // Test migrate function (lines 246-248)
+  it('should run migration when version changes', () => {
+    const migrate = vi.fn((state: unknown, version: number) => {
+      // Migrate from version 0 to version 1
+      return { count: (state as { count: number }).count * 2 };
+    });
+
+    const mockStorage: Record<string, string> = {
+      'test': JSON.stringify({ state: { count: 5 }, version: 0 }),
+    };
+    const storage = {
+      getItem: (key: string) => mockStorage[key] || null,
+      setItem: (key: string, value: string) => {
+        mockStorage[key] = value;
+      },
+      removeItem: (key: string) => {
+        delete mockStorage[key];
+      },
+    };
+
+    const store = createStore({ count: 0 }).use(
+      persist({
+        key: 'test',
+        storage,
+        version: 1,
+        migrate,
+      })
+    );
+
+    expect(migrate).toHaveBeenCalledWith({ count: 5 }, 0);
+    expect(store.getState().count).toBe(10); // migrated value
+  });
+
+  // Test customMerge function (lines 251-254)
+  it('should use custom merge function when provided', () => {
+    const merge = vi.fn((persistedState: any, currentState: any) => ({
+      ...currentState,
+      ...persistedState,
+      merged: true,
+    }));
+
+    const mockStorage: Record<string, string> = {
+      'test': JSON.stringify({ state: { count: 5 }, version: 0 }),
+    };
+    const storage = {
+      getItem: (key: string) => mockStorage[key] || null,
+      setItem: (key: string, value: string) => {
+        mockStorage[key] = value;
+      },
+      removeItem: (key: string) => {
+        delete mockStorage[key];
+      },
+    };
+
+    const store = createStore({ count: 0, extra: 'value' } as any).use(
+      persist({
+        key: 'test',
+        storage,
+        merge,
+      })
+    );
+
+    expect(merge).toHaveBeenCalled();
+    expect((store.getState() as any).merged).toBe(true);
+  });
+
+  // Test partialize function (lines 278-279)
+  it('should use partialize function when persisting', () => {
+    const partialize = vi.fn((state: any) => ({ count: state.count }));
+    const mockStorage: Record<string, string> = {};
+    const storage = {
+      getItem: (key: string) => mockStorage[key] || null,
+      setItem: (key: string, value: string) => {
+        mockStorage[key] = value;
+      },
+      removeItem: (key: string) => {
+        delete mockStorage[key];
+      },
+    };
+
+    const store = createStore({ count: 0, secret: 'hidden' } as any).use(
+      persist({
+        key: 'test',
+        storage,
+        partialize,
+      })
+    );
+
+    store.setState({ count: 5 });
+
+    expect(partialize).toHaveBeenCalled();
+
+    // Verify only count was persisted, not secret
+    const persistedData = JSON.parse(mockStorage['test']);
+    expect(persistedData.state.count).toBe(5);
+    expect(persistedData.state.secret).toBeUndefined();
+  });
+
+  // Test deserialize fallback (lines 236-238)
+  it('should fallback to deserialize when version format parse fails', () => {
+    let callCount = 0;
+    const deserialize = vi.fn((data: string) => {
+      callCount++;
+      if (callCount === 1) {
+        // First call throws, triggering the catch block
+        throw new Error('Parse failed');
+      }
+      // Second call (in catch block) succeeds
+      return { count: 99 };
+    });
+
+    const mockStorage: Record<string, string> = {
+      'test': 'some-data',
+    };
+    const storage = {
+      getItem: (key: string) => mockStorage[key] || null,
+      setItem: (key: string, value: string) => {
+        mockStorage[key] = value;
+      },
+      removeItem: (key: string) => {
+        delete mockStorage[key];
+      },
+    };
+
+    const store = createStore({ count: 0 }).use(
+      persist({
+        key: 'test',
+        storage,
+        deserialize,
+      })
+    );
+
+    // Should have been called twice - once in try block, once in catch
+    expect(deserialize).toHaveBeenCalledTimes(2);
+    expect(store.getState().count).toBe(99);
+  });
+
+  // Test onPersistError during hydration (line 266)
+  it('should call onPersistError during hydration errors', () => {
+    const onPersistError = vi.fn();
+    const storage = {
+      getItem: () => {
+        throw new Error('Storage read error');
+      },
+      setItem: () => {},
+      removeItem: () => {},
+    };
+
+    createStore({ count: 0 }).use(
+      persist({
+        key: 'test',
+        storage,
+        onPersistError,
+      })
+    );
+
+    expect(onPersistError).toHaveBeenCalled();
   });
 });
 

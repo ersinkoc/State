@@ -98,6 +98,43 @@ export const sessionStorage: StorageLike = {
 };
 
 /**
+ * Create a debounced function for persist writes.
+ */
+function createDebounced<T extends (...args: any[]) => any>(
+  fn: T,
+  delay: number
+): T & { cancel: () => void } {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+  const debounced = ((...args: Parameters<T>) => {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+    timeoutId = setTimeout(() => {
+      fn(...args);
+      timeoutId = null;
+    }, delay);
+  }) as T & { cancel: () => void };
+
+  debounced.cancel = () => {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      timeoutId = null;
+    }
+  };
+
+  return debounced;
+}
+
+/**
+ * Storage wrapper with versioning.
+ */
+interface PersistedData<T> {
+  state: T;
+  version: number;
+}
+
+/**
  * Create a persist plugin.
  *
  * @param options - Plugin options
@@ -119,13 +156,48 @@ export const sessionStorage: StorageLike = {
  * const store = createStore({ count: 0, temp: '' })
  *   .use(persist({ key: 'app', whitelist: ['count'] }));
  *
- * // With blacklist
- * const store = createStore({ count: 0, temp: '' })
- *   .use(persist({ key: 'app', blacklist: ['temp'] }));
+ * // With encryption
+ * const store = createStore({ secret: 'data' })
+ *   .use(persist({
+ *     key: 'secure',
+ *     encrypt: (data) => btoa(data),
+ *     decrypt: (data) => atob(data),
+ *   }));
+ *
+ * // With debounce and migration
+ * const store = createStore({ count: 0 })
+ *   .use(persist({
+ *     key: 'app',
+ *     writeDebounce: 1000,
+ *     version: 2,
+ *     migrate: (state, version) => {
+ *       if (version < 2) return { ...state, newField: 'default' };
+ *       return state;
+ *     },
+ *   }));
  * ```
  */
 export function persist<TState>(options: PersistOptions<TState>): Plugin<TState> {
-  const { key, storage = defaultStorage, whitelist, blacklist } = options;
+  const {
+    key,
+    storage = defaultStorage,
+    whitelist,
+    blacklist,
+    partialize,
+    merge: customMerge,
+    version = 0,
+    migrate,
+    serialize = JSON.stringify,
+    deserialize = JSON.parse,
+    encrypt,
+    decrypt,
+    writeDebounce,
+    onRehydrateStorage,
+    onHydrationComplete,
+    onPersistError,
+  } = options;
+
+  let cancelDebounce: (() => void) | null = null;
 
   return {
     name: 'persist',
@@ -133,35 +205,125 @@ export function persist<TState>(options: PersistOptions<TState>): Plugin<TState>
     install(store: Store<TState>) {
       // Hydrate state from storage
       try {
-        const saved = storage.getItem(key);
+        let saved = storage.getItem(key);
+
+        // Decrypt if needed
+        if (saved && decrypt) {
+          try {
+            saved = decrypt(saved);
+          } catch {
+            // Decryption failed, treat as no saved data
+            saved = null;
+          }
+        }
+
         if (saved) {
-          const parsed = JSON.parse(saved);
-          store.merge(parsed as any);
+          let parsed: Partial<TState>;
+          let persistedVersion = 0;
+
+          // Try to parse with versioning
+          try {
+            const data = deserialize(saved) as PersistedData<Partial<TState>> | Partial<TState>;
+
+            // Check if it's versioned data
+            if (data && typeof data === 'object' && 'state' in data && 'version' in data) {
+              parsed = (data as PersistedData<Partial<TState>>).state;
+              persistedVersion = (data as PersistedData<Partial<TState>>).version;
+            } else {
+              parsed = data as Partial<TState>;
+            }
+          } catch {
+            // Fallback to direct parse
+            parsed = deserialize(saved);
+          }
+
+          // Call onRehydrateStorage
+          if (onRehydrateStorage) {
+            onRehydrateStorage(parsed as TState);
+          }
+
+          // Run migration if needed
+          if (migrate && persistedVersion < version) {
+            parsed = migrate(parsed, persistedVersion) as Partial<TState>;
+          }
+
+          // Merge with current state
+          if (customMerge) {
+            const currentState = store.getState();
+            const mergedState = customMerge(parsed, currentState);
+            store.setState(mergedState as any);
+          } else {
+            store.merge(parsed as any);
+          }
+
+          // Call onHydrationComplete
+          if (onHydrationComplete) {
+            onHydrationComplete(store.getState());
+          }
         }
       } catch (error) {
-        console.error(`Failed to hydrate state from '${key}':`, error);
+        if (onPersistError) {
+          onPersistError(error as Error);
+        } else {
+          console.error(`Failed to hydrate state from '${key}':`, error);
+        }
+      }
+
+      // Persist function
+      const persistState = (state: TState) => {
+        try {
+          let toSave: Partial<TState> = state;
+
+          // Apply partialize first
+          if (partialize) {
+            toSave = partialize(state);
+          } else if (whitelist) {
+            toSave = pick(state as any, whitelist) as Partial<TState>;
+          } else if (blacklist) {
+            toSave = omit(state as any, blacklist) as unknown as Partial<TState>;
+          }
+
+          // Wrap with version
+          const dataToStore: PersistedData<Partial<TState>> = {
+            state: toSave,
+            version,
+          };
+
+          // Serialize
+          let serialized = serialize(dataToStore as any);
+
+          // Encrypt if needed
+          if (encrypt) {
+            serialized = encrypt(serialized);
+          }
+
+          storage.setItem(key, serialized);
+        } catch (error) {
+          if (onPersistError) {
+            onPersistError(error as Error);
+          } else {
+            console.error(`Failed to persist state to '${key}':`, error);
+          }
+        }
+      };
+
+      // Apply debounce if configured
+      const debouncedPersist = writeDebounce && writeDebounce > 0
+        ? createDebounced(persistState, writeDebounce)
+        : persistState;
+
+      if (writeDebounce && writeDebounce > 0) {
+        cancelDebounce = () => (debouncedPersist as any).cancel?.();
       }
 
       // Subscribe to state changes and persist
-      store.subscribe((state) => {
-        try {
-          let toSave = state;
-
-          if (whitelist) {
-            toSave = pick(state as any, whitelist) as any;
-          } else if (blacklist) {
-            toSave = omit(state as any, blacklist) as any;
-          }
-
-          storage.setItem(key, JSON.stringify(toSave));
-        } catch (error) {
-          console.error(`Failed to persist state to '${key}':`, error);
-        }
-      });
+      store.subscribe(debouncedPersist);
     },
     onDestroy() {
-      // Optionally clear storage on destroy
-      // storage.removeItem(key);
+      // Cancel pending debounced writes
+      if (cancelDebounce) {
+        cancelDebounce();
+      }
     },
   };
 }

@@ -16,6 +16,38 @@ export interface PersistOptions<TState> {
   whitelist?: Array<keyof TState>;
   /** List of state keys to exclude (blacklist) */
   blacklist?: Array<keyof TState>;
+
+  // v1.2.0 Enhanced options
+
+  /** Custom function to select which parts of state to persist */
+  partialize?: (state: TState) => Partial<TState>;
+  /** Custom merge strategy for hydration */
+  merge?: (persistedState: Partial<TState>, currentState: TState) => TState;
+
+  /** Version for migration support */
+  version?: number;
+  /** Migration function between versions */
+  migrate?: (persistedState: unknown, version: number) => TState;
+
+  /** Custom serialization */
+  serialize?: (state: Partial<TState>) => string;
+  /** Custom deserialization */
+  deserialize?: (str: string) => Partial<TState>;
+
+  /** Encryption function */
+  encrypt?: (data: string) => string;
+  /** Decryption function */
+  decrypt?: (data: string) => string;
+
+  /** Debounce writes to storage (ms) */
+  writeDebounce?: number;
+
+  /** Called when hydration starts */
+  onRehydrateStorage?: (state: TState | undefined) => void;
+  /** Called when hydration completes */
+  onHydrationComplete?: (state: TState) => void;
+  /** Called on persistence error */
+  onPersistError?: (error: Error) => void;
 }
 
 /**
