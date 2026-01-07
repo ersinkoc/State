@@ -1,8 +1,8 @@
 export const PACKAGE_NAME = '@oxog/state';
 export const GITHUB_REPO = 'ersinkoc/state';
 export const NPM_PACKAGE = '@oxog/state';
-export const VERSION = '1.0.0';
-export const DESCRIPTION = 'Zero-dependency reactive state management for any framework';
+export const VERSION = '1.2.0';
+export const DESCRIPTION = 'Zero-dependency reactive state management for any framework - featuring slices, computed values, effects, validation, and middleware support';
 export const DOMAIN = 'state.oxog.dev';
 
 export const DOCS_SECTIONS = [
@@ -24,9 +24,20 @@ export const DOCS_SECTIONS = [
     ],
   },
   {
+    title: 'Patterns',
+    items: [
+      { title: 'Slices', href: '/docs/slices' },
+      { title: 'Computed Values', href: '/docs/computed' },
+      { title: 'Store Federation', href: '/docs/federation' },
+    ],
+  },
+  {
     title: 'Advanced',
     items: [
       { title: 'Plugins', href: '/docs/plugins' },
+      { title: 'Effects', href: '/docs/effects' },
+      { title: 'Validation', href: '/docs/validation' },
+      { title: 'Testing', href: '/docs/testing' },
       { title: 'TypeScript', href: '/docs/typescript' },
       { title: 'Best Practices', href: '/docs/best-practices' },
     ],
@@ -43,6 +54,15 @@ export const API_SECTIONS = [
     ],
   },
   {
+    title: 'React Hooks',
+    items: [
+      { title: 'useShallow', href: '/api/use-shallow' },
+      { title: 'useAction', href: '/api/use-action' },
+      { title: 'useStoreSelector', href: '/api/use-store-selector' },
+      { title: 'useSetState', href: '/api/use-set-state' },
+    ],
+  },
+  {
     title: 'Store API',
     items: [
       { title: 'getState', href: '/api/get-state' },
@@ -53,12 +73,23 @@ export const API_SECTIONS = [
     ],
   },
   {
+    title: 'Patterns',
+    items: [
+      { title: 'createSlice', href: '/api/create-slice' },
+      { title: 'computed', href: '/api/computed' },
+      { title: 'createFederation', href: '/api/create-federation' },
+    ],
+  },
+  {
     title: 'Plugins',
     items: [
       { title: 'persist', href: '/api/persist' },
       { title: 'devtools', href: '/api/devtools' },
       { title: 'history', href: '/api/history' },
       { title: 'sync', href: '/api/sync' },
+      { title: 'logger', href: '/api/logger' },
+      { title: 'effects', href: '/api/effects' },
+      { title: 'validate', href: '/api/validate' },
     ],
   },
 ];

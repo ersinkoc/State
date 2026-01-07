@@ -110,6 +110,141 @@ function UserProfile({ userId }: { userId: string }) {
   return <div>{user.name}</div>;
 }`;
 
+// v1.2.0 New Hooks
+const useShallowCode = `import { createStore, useStore, useShallow } from '@oxog/state';
+
+const store = createStore({
+  users: [{ id: 1, name: 'Alice' }, { id: 2, name: 'Bob' }],
+  filters: { active: true },
+});
+
+function UserList() {
+  // Without useShallow - re-renders on any state change
+  // const { users, filters } = useStore(store, s => ({ users: s.users, filters: s.filters }));
+
+  // With useShallow - only re-renders when object values change
+  const { users, filters } = useStore(
+    store,
+    useShallow(s => ({ users: s.users, filters: s.filters }))
+  );
+
+  return (
+    <ul>
+      {users.filter(u => filters.active).map(u => (
+        <li key={u.id}>{u.name}</li>
+      ))}
+    </ul>
+  );
+}`;
+
+const useStoreSelectorCode = `import { createStore, useStoreSelector } from '@oxog/state';
+
+const store = createStore({
+  users: [{ id: 1, active: true }, { id: 2, active: false }],
+  orders: [{ total: 100 }, { total: 200 }],
+});
+
+function Dashboard() {
+  // Select multiple values with independent subscriptions
+  const { userCount, activeUsers, totalRevenue } = useStoreSelector(store, {
+    userCount: s => s.users.length,
+    activeUsers: s => s.users.filter(u => u.active).length,
+    totalRevenue: s => s.orders.reduce((sum, o) => sum + o.total, 0),
+  });
+
+  return (
+    <div>
+      <p>Total Users: {userCount}</p>
+      <p>Active Users: {activeUsers}</p>
+      <p>Revenue: \${totalRevenue}</p>
+    </div>
+  );
+}`;
+
+const useStoreActionsCode = `import { createStore, useStore, useStoreActions } from '@oxog/state';
+
+const store = createStore({
+  count: 0,
+  $increment: (state) => ({ count: state.count + 1 }),
+  $decrement: (state) => ({ count: state.count - 1 }),
+  $reset: () => ({ count: 0 }),
+});
+
+function Counter() {
+  const count = useStore(store, s => s.count);
+
+  // Get multiple actions at once with stable references
+  const { increment, decrement, reset } = useStoreActions(
+    store,
+    'increment', 'decrement', 'reset'
+  );
+
+  return (
+    <div>
+      <button onClick={decrement}>-</button>
+      <span>{count}</span>
+      <button onClick={increment}>+</button>
+      <button onClick={reset}>Reset</button>
+    </div>
+  );
+}`;
+
+const useSetStateCode = `import { createStore, useStore, useSetState } from '@oxog/state';
+
+const store = createStore({
+  name: '',
+  email: '',
+  age: 0,
+});
+
+function Form() {
+  const { name, email, age } = useStore(store);
+  const setState = useSetState(store);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value, type } = e.target;
+    setState({ [name]: type === 'number' ? Number(value) : value });
+  };
+
+  return (
+    <form>
+      <input name="name" value={name} onChange={handleChange} />
+      <input name="email" value={email} onChange={handleChange} />
+      <input name="age" type="number" value={age} onChange={handleChange} />
+    </form>
+  );
+}`;
+
+const useTransientSubscribeCode = `import { createStore, useTransientSubscribe } from '@oxog/state';
+
+const store = createStore({
+  scrollPosition: 0,
+  mousePosition: { x: 0, y: 0 },
+});
+
+function Analytics() {
+  // Subscribe without causing re-renders
+  useTransientSubscribe(
+    store,
+    s => s.scrollPosition,
+    (position, prevPosition) => {
+      // Send analytics event
+      analytics.track('scroll', { position, prevPosition });
+    }
+  );
+
+  useTransientSubscribe(
+    store,
+    s => s.mousePosition,
+    (pos) => {
+      // Update heatmap without re-rendering
+      heatmap.update(pos.x, pos.y);
+    }
+  );
+
+  return <div>Analytics tracking active</div>;
+}`;
+
 export function ReactIntegration() {
   return (
     <div className="container max-w-screen-xl mx-auto px-4 py-12">
@@ -150,11 +285,49 @@ export function ReactIntegration() {
           </p>
           <CodeBlock code={asyncComponentCode} language="typescript" filename="Async.tsx" />
 
+          <div className="mt-12 mb-8 p-4 rounded-lg bg-primary/5 border border-primary/20">
+            <h3 className="text-lg font-semibold text-primary mb-2">New in v1.2.0</h3>
+            <p className="text-muted-foreground">
+              The following hooks were added in v1.2.0 for improved performance and developer experience.
+            </p>
+          </div>
+
+          <h2 className="text-2xl font-semibold mb-4">useShallow Hook</h2>
+          <p className="text-muted-foreground mb-4">
+            Wrap selectors that return objects to avoid unnecessary re-renders with shallow equality:
+          </p>
+          <CodeBlock code={useShallowCode} language="typescript" filename="useShallow.tsx" />
+
+          <h2 className="text-2xl font-semibold mb-4">useStoreSelector Hook</h2>
+          <p className="text-muted-foreground mb-4">
+            Select multiple values with named selectors, each tracked independently:
+          </p>
+          <CodeBlock code={useStoreSelectorCode} language="typescript" filename="useStoreSelector.tsx" />
+
+          <h2 className="text-2xl font-semibold mb-4">useStoreActions Hook</h2>
+          <p className="text-muted-foreground mb-4">
+            Get multiple actions at once with stable references:
+          </p>
+          <CodeBlock code={useStoreActionsCode} language="typescript" filename="useStoreActions.tsx" />
+
+          <h2 className="text-2xl font-semibold mb-4">useSetState Hook</h2>
+          <p className="text-muted-foreground mb-4">
+            Get a stable setState function for partial updates:
+          </p>
+          <CodeBlock code={useSetStateCode} language="typescript" filename="useSetState.tsx" />
+
+          <h2 className="text-2xl font-semibold mb-4">useTransientSubscribe Hook</h2>
+          <p className="text-muted-foreground mb-4">
+            Subscribe to state changes without causing re-renders - perfect for analytics and side effects:
+          </p>
+          <CodeBlock code={useTransientSubscribeCode} language="typescript" filename="useTransientSubscribe.tsx" />
+
           <h2 className="text-2xl font-semibold mb-4">Performance Tips</h2>
           <ul className="list-disc list-inside text-muted-foreground space-y-2">
             <li><strong>Use selectors</strong>: Only select what you need</li>
+            <li><strong>Use useShallow</strong>: For selectors returning objects</li>
             <li><strong>Avoid selecting entire state</strong>: Break into smaller selections</li>
-            <li><strong>Custom equality functions</strong>: For complex objects like arrays</li>
+            <li><strong>Use useTransientSubscribe</strong>: For side effects that don't need UI updates</li>
             <li><strong>Local stores</strong>: Use <code>useCreateStore</code> for component-specific state</li>
           </ul>
         </div>
